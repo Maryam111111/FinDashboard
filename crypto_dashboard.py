@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from ta.volatility import BollingerBands
-from ta.trend import SMAIndicator, IchimokuIndicator
+from ta.trend import SMAIndicator
 from ta.momentum import RSIIndicator
 
 # ========== Helpers ==========
@@ -56,14 +56,7 @@ def compute_indicator(df, kind="SMA"):
         df["bb_h"] = bb.bollinger_hband()
         df["bb_l"] = bb.bollinger_lband()
         df["bb_m"] = bb.bollinger_mavg()
-    # elif kind == "Ichimoku":
-        # ta’s IchimokuIndicator needs high, low, close; we only have price => approx
-        # for demo: apply Ichimoku using price as all series
-      #  ich = IchimokuIndicator(close=df["price"], high=df["price"], low=df["price"])
-     #   df["tenkan"] = ich.ichimoku_conversion_line()
-      #  df["kijun"] = ich.ichimoku_base_line()
-       # df["senkou_a"] = ich.ichimoku_a()
-       # df["senkou_b"] = ich.ichimoku_b()
+
     elif kind == "RSI":
         rsi = RSIIndicator(df["price"], window=14)
         df["rsi_14"] = rsi.rsi()
@@ -99,7 +92,7 @@ coin_id = coin["id"]
 df = fetch_coin_history(coin_id, days=30)
 
 # 3: choose indicator
-indicator = st.selectbox("Choose indicator:", ["SMA", "Bollinger Bands", "Ichimoku", "RSI"])
+indicator = st.selectbox("Choose indicator:", ["SMA", "Bollinger Bands", "RSI"])
 df2 = compute_indicator(df.copy(), indicator)
 
 # 4: plot price + indicator
@@ -111,11 +104,7 @@ if indicator == "SMA" and "SMA_14" in df2.columns:
 elif indicator == "Bollinger Bands":
     fig.add_scatter(x=df2["timestamp"], y=df2["bb_h"], name="BB High")
     fig.add_scatter(x=df2["timestamp"], y=df2["bb_l"], name="BB Low")
-elif indicator == "Ichimoku":
-    fig.add_scatter(x=df2["timestamp"], y=df2["tenkan"], name="Tenkan")
-    fig.add_scatter(x=df2["timestamp"], y=df2["kijun"], name="Kijun")
-    fig.add_scatter(x=df2["timestamp"], y=df2["senkou_a"], name="Senkou A")
-    fig.add_scatter(x=df2["timestamp"], y=df2["senkou_b"], name="Senkou B")
+
 elif indicator == "RSI" and "rsi_14" in df2.columns:
     # for RSI, plot as separate subplot
     fig2 = px.line(df2, x="timestamp", y="rsi_14", title=f"{choice} RSI(14)")
