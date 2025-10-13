@@ -26,7 +26,7 @@ def fetch_top_coins(n=30):
 
 @st.cache_data(ttl=600)
 def fetch_coin_history(coin_id, days=30, interval="daily"):
-    """Fetch historical price/volume for coin (ohlcv)."""
+    """Fetch historical price/volume for coin (ohlcv) with safety check."""
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
     params = {
         "vs_currency": "usd",
@@ -35,11 +35,23 @@ def fetch_coin_history(coin_id, days=30, interval="daily"):
     }
     r = requests.get(url, params=params, timeout=10)
     data = r.json()
+    
+    # Check if 'prices' exist
+    if "prices" not in data or len(data["prices"]) == 0:
+        st.warning(f"No historical data found for {coin_id}.")
+        return pd.DataFrame(columns=["timestamp", "price", "volume"])
+    
     df = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    vol = pd.DataFrame(data["total_volumes"], columns=["timestamp", "volume"])
-    vol["timestamp"] = pd.to_datetime(vol["timestamp"], unit="ms")
-    df = df.merge(vol, on="timestamp", how="left")
+    
+    # Merge volumes if available
+    if "total_volumes" in data:
+        vol = pd.DataFrame(data["total_volumes"], columns=["timestamp", "volume"])
+        vol["timestamp"] = pd.to_datetime(vol["timestamp"], unit="ms")
+        df = df.merge(vol, on="timestamp", how="left")
+    else:
+        df["volume"] = None
+    
     return df
 
 def compute_indicator(df, kind="SMA"):
@@ -71,12 +83,9 @@ def compute_buy_sell_strength(df):
 st.title("Crypto Dashboard with Indicators & Strength Gauge")
 
 # 1: timeframe selection
-timeframe = st.selectbox("Choose timeframe:", ["1 Day", "4 Hours", "Monthly"])
+timeframe = st.selectbox("Choose timeframe:", ["1 Day", "Monthly"])
 
 if timeframe == "1 Day":
-    days = 1
-    interval = "hourly"
-elif timeframe == "4 Hours":
     days = 1
     interval = "hourly"
 elif timeframe == "Monthly":
@@ -95,10 +104,6 @@ coin_id = coin["id"]
 # 3: fetch coin history
 df = fetch_coin_history(coin_id, days=days, interval=interval)
 
-# filter last 4 hours if needed
-if timeframe == "4 Hours":
-    df = df[df["timestamp"] >= (df["timestamp"].max() - pd.Timedelta(hours=4))]
-
 # 4: choose indicator
 indicator = st.selectbox("Choose indicator:", ["SMA", "Bollinger Bands", "RSI"])
 df2 = compute_indicator(df.copy(), indicator)
@@ -111,7 +116,7 @@ elif indicator == "Bollinger Bands":
     fig.add_scatter(x=df2["timestamp"], y=df2["bb_h"], name="BB High")
     fig.add_scatter(x=df2["timestamp"], y=df2["bb_l"], name="BB Low")
 elif indicator == "RSI" and "rsi_14" in df2.columns:
-    fig2 = px.line(df2, x="timestamp", y="rsi_14", title=f"{choice} RSI(14)")
+    fig2 = px.line(df2, x="timestamp", y=df2["rsi_14"], title=f"{choice} RSI(14)")
     st.plotly_chart(fig2, use_container_width=True)
 
 st.plotly_chart(fig, use_container_width=True)
