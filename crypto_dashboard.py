@@ -147,5 +147,5 @@ st.plotly_chart(g, use_container_width=True)
 
 # 7: transaction fee (if available)
 # Note: CoinGecko does *not* reliably provide per-transaction fee data (on-chain gas) in this API.
-st.subheader("Transaction / Network Fee Info")
+#st.subheader("Transaction / Network Fee Info")
 
