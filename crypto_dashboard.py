@@ -87,6 +87,7 @@ st.title("Crypto Dashboard with Indicators & Strength Gauge")
 
 # 1: fetch top coins
 coins = fetch_top_coins(30)
+coins = [c for c in fetch_top_coins(30) if c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
 coin_names = [f"{c['name']} ({c['symbol']})" for c in coins]
 choice = st.selectbox("Choose a crypto:", coin_names)
 # map back to coin ID
