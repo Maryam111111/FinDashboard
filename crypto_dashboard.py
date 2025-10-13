@@ -73,7 +73,7 @@ def compute_bbands(df, window=20, price_type="close"):
 
 # ======== Streamlit UI ========
 
-st.title("💹 Advanced Crypto Dashboard — Cross MAs, Indicators & Oscillators")
+st.title("Crypto Dashboard")
 
 # --- 1. Fetch Coins ---
 coins = fetch_top_coins(30)
