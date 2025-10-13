@@ -3,11 +3,11 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
-from ta.volatility import BollingerBands
 from ta.trend import SMAIndicator
 from ta.momentum import RSIIndicator
+from ta.volatility import BollingerBands
 
-# ===== Helpers =====
+# ======== Helper Functions ========
 
 @st.cache_data(ttl=600)
 def fetch_top_coins(n=30):
@@ -22,135 +22,116 @@ def fetch_top_coins(n=30):
     }
     try:
         r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        if isinstance(data, list):
-            return data
-        else:
-            return []
+        return r.json()
     except:
         return []
 
 @st.cache_data(ttl=600)
-def fetch_coin_history(coin_id, days=30, interval="daily"):
-    """Fetch historical price/volume for coin (ohlcv) with safety check."""
+def fetch_coin_history(coin_id, days=90, interval="daily"):
+    """Fetch historical market data for a given coin."""
     url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-    params = {
-        "vs_currency": "usd",
-        "days": days,
-        "interval": interval
-    }
+    params = {"vs_currency": "usd", "days": days, "interval": interval}
     try:
         r = requests.get(url, params=params, timeout=10)
         data = r.json()
-        if "prices" not in data or len(data["prices"]) == 0:
-            st.warning(f"No historical data found for {coin_id}.")
-            return pd.DataFrame(columns=["timestamp", "price", "volume"])
+        if "prices" not in data:
+            return pd.DataFrame()
         df = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         if "total_volumes" in data:
             vol = pd.DataFrame(data["total_volumes"], columns=["timestamp", "volume"])
             vol["timestamp"] = pd.to_datetime(vol["timestamp"], unit="ms")
             df = df.merge(vol, on="timestamp", how="left")
-        else:
-            df["volume"] = None
+        # Simulate high/low/close for price-type selection
+        df["high"] = df["price"] * (1 + 0.02)
+        df["low"] = df["price"] * (1 - 0.02)
+        df["close"] = df["price"]
+        df["average"] = (df["high"] + df["low"] + df["close"]) / 3
         return df
     except:
-        st.warning("Failed to fetch historical data.")
-        return pd.DataFrame(columns=["timestamp", "price", "volume"])
+        return pd.DataFrame()
 
-def compute_indicator(df, kind="SMA"):
-    """Compute chosen indicator and return df with indicator column."""
-    if kind == "SMA":
-        sma = SMAIndicator(df["price"], window=50)
-        df["SMA_14"] = sma.sma_indicator()
-    elif kind == "Bollinger Bands":
-        bb = BollingerBands(df["price"], window=30, window_dev=2)
-        df["bb_h"] = bb.bollinger_hband()
-        df["bb_l"] = bb.bollinger_lband()
-        df["bb_m"] = bb.bollinger_mavg()
-    elif kind == "RSI":
-        rsi = RSIIndicator(df["price"], window=10)
-        df["rsi_14"] = rsi.rsi()
+def compute_cross_ma(df, short_win=10, long_win=50, price_type="close"):
+    """Compute short & long moving averages for cross-over strategy."""
+    short_ma = SMAIndicator(df[price_type], window=short_win).sma_indicator()
+    long_ma = SMAIndicator(df[price_type], window=long_win).sma_indicator()
+    df[f"SMA_{short_win}"] = short_ma
+    df[f"SMA_{long_win}"] = long_ma
+    df["Signal"] = (short_ma > long_ma).astype(int)
     return df
 
-def compute_buy_sell_strength(df):
-    """Naive logic: compare last price to 20-day SMA."""
-    if df.empty:
-        return 0
-    sma = SMAIndicator(df["price"], window=20)
-    last = df["price"].iloc[-1]
-    last_sma = sma.sma_indicator().iloc[-1]
-    diff = last - last_sma
-    strength = max(min(diff / last_sma, 1), -1)
-    return strength
+def compute_rsi(df, window=14, price_type="close"):
+    df[f"RSI_{window}"] = RSIIndicator(df[price_type], window=window).rsi()
+    return df
 
-# ===== Streamlit UI =====
+def compute_bbands(df, window=20, price_type="close"):
+    bb = BollingerBands(df[price_type], window=window, window_dev=2)
+    df["bb_h"] = bb.bollinger_hband()
+    df["bb_l"] = bb.bollinger_lband()
+    df["bb_m"] = bb.bollinger_mavg()
+    return df
 
-st.title("Crypto Dashboard with Indicators & Strength Gauge")
+# ======== Streamlit UI ========
 
-# 1: fetch top coins
-coins_raw = fetch_top_coins(30)
-if not coins_raw:
-    st.error("Failed to fetch top coins. Try again later.")
-    st.stop()
+st.title("💹 Advanced Crypto Dashboard — Cross MAs, Indicators & Oscillators")
 
-coins = [c for c in coins_raw if c.get("id") not in ["tether", "usd-coin", "dai", "binance-usd"]]
+# --- 1. Fetch Coins ---
+coins = fetch_top_coins(30)
 if not coins:
-    st.error("No coins available.")
+    st.error("⚠️ Failed to fetch top coins. Try again later.")
     st.stop()
 
-coin_names = [f"{c.get('name','')} ({c.get('symbol','')})" for c in coins]
-choice = st.selectbox("Choose a crypto:", coin_names)
+# --- 2. Choose Coin ---
+coins = [c for c in coins if c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
+coin_names = [f"{c['name']} ({c['symbol']})" for c in coins]
+choice = st.selectbox("Choose a cryptocurrency:", coin_names)
 idx = coin_names.index(choice)
 coin = coins[idx]
-coin_id = coin.get("id")
+coin_id = coin["id"]
 
-# 2: fetch coin history (hardcoded monthly)
-df = fetch_coin_history(coin_id, days=30, interval="daily")
+# --- 3. Fetch Data ---
+days = st.slider("Select number of past days:", 30, 365, 90)
+df = fetch_coin_history(coin_id, days=days)
 if df.empty:
-    st.error("No historical data available for this coin.")
+    st.error("No data available.")
     st.stop()
 
-# 3: choose indicator
-indicator = st.selectbox("Choose indicator:", ["SMA", "Bollinger Bands", "RSI"])
-df2 = compute_indicator(df.copy(), indicator)
+# --- 4. Choose Price Type ---
+price_type = st.selectbox("Choose price type:", ["close", "high", "low", "average"])
 
-# 4: plot price + indicator
-fig = px.line(df2, x="timestamp", y="price", title=f"{choice} Price & {indicator}")
-if indicator == "SMA" and "SMA_14" in df2.columns:
-    fig.add_scatter(x=df2["timestamp"], y=df2["SMA_14"], name="SMA 14")
-elif indicator == "Bollinger Bands":
-    fig.add_scatter(x=df2["timestamp"], y=df2["bb_h"], name="BB High")
-    fig.add_scatter(x=df2["timestamp"], y=df2["bb_l"], name="BB Low")
-elif indicator == "RSI" and "rsi_14" in df2.columns:
-    fig2 = px.line(df2, x="timestamp", y=df2["rsi_14"], title=f"{choice} RSI(14)")
-    st.plotly_chart(fig2, use_container_width=True)
+# --- 5. Choose Analysis Type ---
+analysis_type = st.selectbox("Select analysis type:", ["Cross Moving Averages", "RSI", "Bollinger Bands"])
+
+# --- 6. Indicator Settings ---
+if analysis_type == "Cross Moving Averages":
+    short_win = st.slider("Short MA Window:", 5, 30, 10)
+    long_win = st.slider("Long MA Window:", 30, 200, 50)
+    df = compute_cross_ma(df, short_win, long_win, price_type)
+elif analysis_type == "RSI":
+    rsi_window = st.slider("RSI Window:", 7, 50, 14)
+    df = compute_rsi(df, rsi_window, price_type)
+elif analysis_type == "Bollinger Bands":
+    bb_window = st.slider("Bollinger Band Window:", 10, 50, 20)
+    df = compute_bbands(df, bb_window, price_type)
+
+# --- 7. Visualization ---
+fig = px.line(df, x="timestamp", y=df[price_type], title=f"{choice} — {analysis_type}", labels={"timestamp": "Date", price_type: "Price (USD)"})
+
+if analysis_type == "Cross Moving Averages":
+    fig.add_scatter(x=df["timestamp"], y=df[f"SMA_{short_win}"], name=f"SMA {short_win}", line=dict(dash="dot"))
+    fig.add_scatter(x=df["timestamp"], y=df[f"SMA_{long_win}"], name=f"SMA {long_win}", line=dict(dash="dash"))
+elif analysis_type == "Bollinger Bands":
+    fig.add_scatter(x=df["timestamp"], y=df["bb_h"], name="BB High", line=dict(dash="dot"))
+    fig.add_scatter(x=df["timestamp"], y=df["bb_l"], name="BB Low", line=dict(dash="dot"))
+elif analysis_type == "RSI":
+    fig_rsi = px.line(df, x="timestamp", y=df[f"RSI_{rsi_window}"], title=f"{choice} RSI ({rsi_window})")
+    st.plotly_chart(fig_rsi, use_container_width=True)
 
 st.plotly_chart(fig, use_container_width=True)
 
-# 5: show coin info
+# --- 8. Show Coin Info ---
 st.subheader("Coin Info")
-st.write("Market Cap (USD):", coin.get("market_cap"))
-st.write("Current Price (USD):", coin.get("current_price"))
-st.write("24h Volume:", coin.get("total_volume"))
-st.write("Market Cap Rank:", coin.get("market_cap_rank"))
-
-# 6: gauge — buy/sell strength
-strength = compute_buy_sell_strength(df2)
-perc = int((strength + 1) * 50)
-g = go.Figure(go.Indicator(
-    mode="gauge+number",
-    value=perc,
-    domain={'x': [0, 1], 'y': [0, 1]},
-    gauge={
-        'axis': {'range': [0, 100]},
-        'bar': {'color': "darkblue"},
-        'steps': [
-            {'range': [0, 50], 'color': "red"},
-            {'range': [50, 100], 'color': "green"}
-        ],
-        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.8, 'value': 50}
-    },
-    title={'text': "Buy / Sell Strength"}
-))
-st.plotly_chart(g, use_container_width=True)
+st.write("💰 Current Price (USD):", coin.get("current_price"))
+st.write("🏦 Market Cap (USD):", coin.get("market_cap"))
+st.write("📊 24h Volume:", coin.get("total_volume"))
+st.write("📈 Market Cap Rank:", coin.get("market_cap_rank"))
