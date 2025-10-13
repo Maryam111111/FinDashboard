@@ -61,15 +61,15 @@ def fetch_coin_history(coin_id, days=30, interval="daily"):
 def compute_indicator(df, kind="SMA"):
     """Compute chosen indicator and return df with indicator column."""
     if kind == "SMA":
-        sma = SMAIndicator(df["price"], window=50)
+        sma = SMAIndicator(df["price"], window=14)
         df["SMA_14"] = sma.sma_indicator()
     elif kind == "Bollinger Bands":
-        bb = BollingerBands(df["price"], window=50, window_dev=2)
+        bb = BollingerBands(df["price"], window=20, window_dev=2)
         df["bb_h"] = bb.bollinger_hband()
         df["bb_l"] = bb.bollinger_lband()
         df["bb_m"] = bb.bollinger_mavg()
     elif kind == "RSI":
-        rsi = RSIIndicator(df["price"], window=50)
+        rsi = RSIIndicator(df["price"], window=14)
         df["rsi_14"] = rsi.rsi()
     return df
 
