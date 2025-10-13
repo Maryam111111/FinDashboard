@@ -56,14 +56,14 @@ def compute_indicator(df, kind="SMA"):
         df["bb_h"] = bb.bollinger_hband()
         df["bb_l"] = bb.bollinger_lband()
         df["bb_m"] = bb.bollinger_mavg()
-    elif kind == "Ichimoku":
+    # elif kind == "Ichimoku":
         # ta’s IchimokuIndicator needs high, low, close; we only have price => approx
         # for demo: apply Ichimoku using price as all series
-        ich = IchimokuIndicator(close=df["price"], high=df["price"], low=df["price"])
-        df["tenkan"] = ich.ichimoku_conversion_line()
-        df["kijun"] = ich.ichimoku_base_line()
-        df["senkou_a"] = ich.ichimoku_a()
-        df["senkou_b"] = ich.ichimoku_b()
+      #  ich = IchimokuIndicator(close=df["price"], high=df["price"], low=df["price"])
+     #   df["tenkan"] = ich.ichimoku_conversion_line()
+      #  df["kijun"] = ich.ichimoku_base_line()
+       # df["senkou_a"] = ich.ichimoku_a()
+       # df["senkou_b"] = ich.ichimoku_b()
     elif kind == "RSI":
         rsi = RSIIndicator(df["price"], window=14)
         df["rsi_14"] = rsi.rsi()
