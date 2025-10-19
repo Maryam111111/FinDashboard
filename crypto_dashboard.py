@@ -11,7 +11,7 @@ from ta.volatility import BollingerBands
 
 @st.cache_data(ttl=600)
 def fetch_top_coins(n=30):
-    """Fetch top n cryptos by market cap via CoinGecko, with fallback."""
+    """Fetch top n cryptos by market cap via CoinGecko."""
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         "vs_currency": "usd",
@@ -22,37 +22,9 @@ def fetch_top_coins(n=30):
     }
     try:
         r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        # Validate response
-        if isinstance(data, list) and len(data) > 0 and "id" in data[0]:
-            return data
-    except Exception as e:
-        print("CoinGecko failed:", e)
-
-    # Fallback API (CryptoCompare)
-    try:
-        fallback_url = "https://min-api.cryptocompare.com/data/top/mktcapfull"
-        params = {"limit": n, "tsym": "USD"}
-        r = requests.get(fallback_url, params=params, timeout=10)
-        data = r.json().get("Data", [])
-        coins = []
-        for d in data:
-            coin_info = d.get("CoinInfo", {})
-            raw = d.get("RAW", {}).get("USD", {})
-            coins.append({
-                "id": coin_info.get("Name", "").lower(),
-                "symbol": coin_info.get("Name", "").lower(),
-                "name": coin_info.get("FullName", ""),
-                "current_price": raw.get("PRICE", None),
-                "market_cap": raw.get("MKTCAP", None),
-                "total_volume": raw.get("VOLUME24HOUR", None),
-                "market_cap_rank": len(coins) + 1
-            })
-        return coins
-    except Exception as e:
-        print("Fallback also failed:", e)
+        return r.json()
+    except:
         return []
-
 
 @st.cache_data(ttl=600)
 def fetch_coin_history(coin_id, days=90, interval="daily"):
@@ -110,8 +82,7 @@ if not coins:
     st.stop()
 
 # --- 2. Choose Coin ---
-coins = [c for c in coins if isinstance(c, dict) and "id" in c and c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
-
+coins = [c for c in coins if c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
 coin_names = [f"{c['name']} ({c['symbol']})" for c in coins]
 choice = st.selectbox("Choose a cryptocurrency:", coin_names)
 idx = coin_names.index(choice)
