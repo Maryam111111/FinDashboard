@@ -11,7 +11,7 @@ from ta.volatility import BollingerBands
 
 @st.cache_data(ttl=600)
 def fetch_top_coins(n=30):
-    """Fetch top n cryptos by market cap via CoinGecko."""
+    """Fetch top n cryptos by market cap via CoinGecko, with fallback."""
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         "vs_currency": "usd",
@@ -22,9 +22,37 @@ def fetch_top_coins(n=30):
     }
     try:
         r = requests.get(url, params=params, timeout=10)
-        return r.json()
-    except:
+        data = r.json()
+        # Validate response
+        if isinstance(data, list) and len(data) > 0 and "id" in data[0]:
+            return data
+    except Exception as e:
+        print("CoinGecko failed:", e)
+
+    # Fallback API (CryptoCompare)
+    try:
+        fallback_url = "https://min-api.cryptocompare.com/data/top/mktcapfull"
+        params = {"limit": n, "tsym": "USD"}
+        r = requests.get(fallback_url, params=params, timeout=10)
+        data = r.json().get("Data", [])
+        coins = []
+        for d in data:
+            coin_info = d.get("CoinInfo", {})
+            raw = d.get("RAW", {}).get("USD", {})
+            coins.append({
+                "id": coin_info.get("Name", "").lower(),
+                "symbol": coin_info.get("Name", "").lower(),
+                "name": coin_info.get("FullName", ""),
+                "current_price": raw.get("PRICE", None),
+                "market_cap": raw.get("MKTCAP", None),
+                "total_volume": raw.get("VOLUME24HOUR", None),
+                "market_cap_rank": len(coins) + 1
+            })
+        return coins
+    except Exception as e:
+        print("Fallback also failed:", e)
         return []
+
 
 @st.cache_data(ttl=600)
 def fetch_coin_history(coin_id, days=90, interval="daily"):
