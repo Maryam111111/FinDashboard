@@ -82,7 +82,8 @@ if not coins:
     st.stop()
 
 # --- 2. Choose Coin ---
-coins = [c for c in coins if c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
+coins = [c for c in coins if isinstance(c, dict) and "id" in c and c["id"] not in ["tether", "usd-coin", "dai", "binance-usd"]]
+
 coin_names = [f"{c['name']} ({c['symbol']})" for c in coins]
 choice = st.selectbox("Choose a cryptocurrency:", coin_names)
 idx = coin_names.index(choice)
